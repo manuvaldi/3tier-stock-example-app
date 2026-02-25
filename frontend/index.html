@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Stock Monitor - Enterprise Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'RedHatText', 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            width: 100%;
+            max-width: 850px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ee0000;
+            padding-bottom: 15px;
+        }
+
+        .logo-redhat {
+            height: 45px; /* Tamaño optimizado para el logo */
+        }
+
+        .container {
+            width: 100%;
+            max-width: 850px; /* Gráfica un poco más pequeña y centrada */
+            background-color: #2d2d2d;
+            padding: 25px;
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            margin: 0;
+            font-weight: 400;
+            font-size: 1.8em;
+            letter-spacing: 0.5px;
+        }
+
+        .status-container {
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            background-color: #2ecc71;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        #status-text {
+            font-size: 0.85em;
+            color: #aaa;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h1>Stock Market Tracker</h1>
+            <div class="status-container">
+                <span class="status-dot" id="dot"></span>
+                <span id="status-text">Live: Ultimos 100 puntos</span>
+            </div>
+        </div>
+        <img src="https://www.redhat.com/cms/managed-files/Brand_Standars-Red_Hat-_color_on-darkgray.svg" alt="Red Hat Logo" class="logo-redhat">
+    </div>
+
+    <div class="container">
+        <canvas id="stockChart" height="120"></canvas> </div>
+
+    <script>
+        const ctx = document.getElementById('stockChart').getContext('2d');
+        
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'AAPL Price (USD)',
+                    data: [],
+                    borderColor: '#ee0000',
+                    backgroundColor: 'rgba(238, 0, 0, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0 // Sin puntos para que la línea se vea más limpia
+                }]
+            },
+            options: {
+                responsive: true,
+                animation: false, // Desactivado para mayor rendimiento
+                plugins: {
+                    legend: { display: false } // Ocultamos leyenda para simplificar
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#888', maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+                        grid: { color: '#3d3d3d' }
+                    },
+                    y: {
+                        ticks: { color: '#888' },
+                        grid: { color: '#3d3d3d' }
+                    }
+                }
+            }
+        });
+
+        async function updateData() {
+            try {
+                const res = await fetch(`http://${window.location.hostname}:5000/data`);
+                const data = await res.json();
+                
+                // El backend ya debería estar limitado a 100, 
+                // pero esto asegura que el frontend solo pinte los últimos 100
+                const limitedData = data.slice(-100);
+
+                chart.data.labels = limitedData.map(d => d[0]);
+                chart.data.datasets[0].data = limitedData.map(d => d[1]);
+                
+                document.getElementById('dot').style.backgroundColor = '#2ecc71';
+                document.getElementById('status-text').innerText = 'Live: Últimos 100 puntos';
+                
+                chart.update('none'); 
+            } catch (e) {
+                document.getElementById('dot').style.backgroundColor = '#f1c40f';
+                document.getElementById('status-text').innerText = 'Reconectando...';
+            }
+        }
+
+        setInterval(updateData, 2000);
+    </script>
+</body>
+</html>
