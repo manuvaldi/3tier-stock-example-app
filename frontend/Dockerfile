@@ -1,21 +1,18 @@
 FROM nginx:alpine
 
-# Copiamos el HTML
+# 1. Copiamos el HTML
 COPY index.html /usr/share/nginx/html/index.html
 
-# Ajustamos permisos y rutas para que Nginx funcione sin ser ROOT
-# 1. Cambiamos el puerto a 8080
-# 2. Movemos las rutas de archivos temporales a /tmp
+# 2. Configuramos Nginx para que sea "OpenShift Friendly"
+# - Cambiamos puerto 80 a 8080
+# - Ajustamos permisos para que el usuario aleatorio de OC pueda leer/escribir
 RUN sed -i 's/listen       80;/listen       8080;/g' /etc/nginx/conf.d/default.conf && \
-    sed -i '/user  nginx;/d' /etc/nginx/nginx.conf && \
-    sed -i 's|/var/run/nginx.pid|/tmp/nginx.pid|g' /etc/nginx/nginx.conf && \
-    sed -i '/http {/a \    proxy_temp_path /tmp/proxy_temp;\n    client_body_temp_path /tmp/client_body_temp;\n    fastcgi_temp_path /tmp/fastcgi_temp;\n    uwsgi_temp_path /tmp/uwsgi_temp;\n    scgi_temp_path /tmp/scgi_temp;' /etc/nginx/nginx.conf && \
-    chown -R 1001:0 /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx && \
-    chmod -R 775 /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx
+    chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx && \
+    chgrp -R 0 /var/cache/nginx /var/log/nginx /etc/nginx
 
-# OpenShift usará un usuario aleatorio, pero pertenecerá al grupo root (0)
-USER 1001
-
+# Exponemos el puerto no privilegiado
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# 3. Forzamos que el PID se escriba en /tmp, donde SI hay permisos
+# Esto soluciona el error: open() "/run/nginx.pid" failed
+CMD ["nginx", "-g", "daemon off; pid /tmp/nginx.pid;"]
