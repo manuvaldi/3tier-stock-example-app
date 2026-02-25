@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
       - name: redis
-        image: redis:alpine
+        image: quay.io/mvalledi/stock-example-app-database:latest
         ports:
         - containerPort: 6379
 ---

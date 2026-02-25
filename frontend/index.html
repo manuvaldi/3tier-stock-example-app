@@ -121,16 +121,14 @@
                 }
             }
         });
-
+        
         async function updateData() {
             try {
-                const res = await fetch(`http://${window.location.hostname}:5000/data`);
+                // Ahora llamamos a la ruta local de Nginx
+                const res = await fetch('/data');
                 const data = await res.json();
                 
-                // El backend ya debería estar limitado a 100, 
-                // pero esto asegura que el frontend solo pinte los últimos 100
                 const limitedData = data.slice(-100);
-
                 chart.data.labels = limitedData.map(d => d[0]);
                 chart.data.datasets[0].data = limitedData.map(d => d[1]);
                 
@@ -143,7 +141,6 @@
                 document.getElementById('status-text').innerText = 'Reconectando...';
             }
         }
-
         setInterval(updateData, 2000);
     </script>
 </body>
