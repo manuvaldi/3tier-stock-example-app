@@ -101,6 +101,9 @@ spec:
       containers:
       - name: nginx-frontend
         image: quay.io/mvalledi/stock-example-app-frontend:latest
+        env:
+        - name: BACKEND_URL
+          value: "http://backend:5000/data"        
         ports:
         - containerPort: 8080
 ---

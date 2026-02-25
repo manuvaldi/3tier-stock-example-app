@@ -1,14 +1,18 @@
 FROM nginx:alpine
 
-# Copy files
 COPY index.html /usr/share/nginx/html/index.html
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copiamos como template
+COPY nginx.conf.template /etc/nginx/templates/nginx.conf.template
 
-# Permissions for OpenShift (GID 0)
 RUN chgrp -R 0 /var/cache/nginx /var/log/nginx /etc/nginx && \
     chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx
 
 EXPOSE 8080
 
-# Start Nginx forcing PID to /tmp
-CMD ["nginx", "-g", "daemon off; pid /tmp/nginx.pid;"]
+# Variable por defecto por si se olvida configurarla
+ENV BACKEND_URL=http://backend:5000/data
+
+# La imagen de Nginx Alpine ejecuta envsubst automáticamente sobre 
+# los archivos en /etc/nginx/templates/ y los deja en /etc/nginx/conf.d/
+# Pero para que sea el config PRINCIPAL, usaremos este comando:
+CMD ["/bin/sh", "-c", "envsubst '${BACKEND_URL}' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off; pid /tmp/nginx.pid;'"]
