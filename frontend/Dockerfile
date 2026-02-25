@@ -1,19 +1,18 @@
 FROM nginx:alpine
 
-# 1. Copiamos el HTML
+# Copy the application HTML
 COPY index.html /usr/share/nginx/html/index.html
 
-# 2. Limpieza total de rutas y puertos para OpenShift
-RUN # Cambiamos puerto 80 a 8080 \
-    sed -i 's/listen       80;/listen       8080;/g' /etc/nginx/conf.d/default.conf && \
-    # ELIMINAMOS la línea del PID original para evitar el error de duplicado \
-    sed -i '/pid/d' /etc/nginx/nginx.conf && \
-    # Ajustamos permisos de carpetas para el grupo root (GID 0) \
-    chgrp -R 0 /var/cache/nginx /var/log/nginx /etc/nginx && \
+# Copy the custom Nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Adjust permissions for OpenShift (GID 0)
+# We make sure the random user can write to cache and logs
+RUN chgrp -R 0 /var/cache/nginx /var/log/nginx /etc/nginx && \
     chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx
 
-# Puerto no privilegiado
+# Expose the non-privileged port
 EXPOSE 8080
 
-# 3. Arrancamos definiendo el PID en una zona segura (/tmp)
+# Start Nginx forcing the PID to /tmp to avoid permission errors
 CMD ["nginx", "-g", "daemon off; pid /tmp/nginx.pid;"]
