@@ -33,6 +33,14 @@ http {
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+
+            # Timeouts agresivos para la demo
+            proxy_connect_timeout 1s;
+            proxy_send_timeout    1s;
+            proxy_read_timeout    1s;
+            
+            # No cachear errores para que la recuperación sea instantánea
+            proxy_cache_bypass $http_upgrade;            
         }
     }
 }
