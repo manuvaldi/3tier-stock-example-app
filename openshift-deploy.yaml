@@ -62,6 +62,11 @@ spec:
       containers:
       - name: python-backend
         image: quay.io/mvalledi/stock-example-app-backend:latest
+        env:
+        - name: REDIS_HOST
+          value: "database"  # Este es el nombre del Service de Redis
+        - name: REDIS_PORT
+          value: "6379"        
         ports:
         - containerPort: 5000
         env:

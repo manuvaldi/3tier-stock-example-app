@@ -4,65 +4,74 @@ import random
 from flask import Flask, jsonify
 from flask_cors import CORS
 import threading
-import sys
+import os # Necessary to read environment variables
 
 app = Flask(__name__)
+# Enable CORS for cross-origin requests from the frontend
 CORS(app)
 
-# Use 'database' as hostname (service name in OpenShift/Compose)
-REDIS_HOST = 'database'
-REDIS_PORT = 6379
+# Read Redis host from environment variable or use 'database' as fallback
+REDIS_HOST = os.getenv('REDIS_HOST', 'database')
+REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+
+# Initialize db as None
+db = None
 
 def get_redis_connection():
     """
-    Attempt to connect to Redis with retries
+    Establish connection with Redis, retrying until successful
     """
-    db = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     while True:
         try:
-            db.ping()
-            print("Successfully connected to Redis")
-            return db
+            # Using the host and port from environment variables
+            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+            r.ping()
+            print(f"Successfully connected to Redis at {REDIS_HOST}")
+            return r
         except redis.ConnectionError:
-            print("Redis not available, retrying in 2 seconds...")
+            print(f"Redis at {REDIS_HOST} not available, retrying in 2 seconds...")
             time.sleep(2)
-
-# Initial connection
-db = get_redis_connection()
 
 def stock_worker():
     """
-    Background worker to generate stock data
+    Background worker to generate stock data even if Redis blips
     """
+    global db
     price = 150.0
     while True:
         try:
+            if db is None:
+                db = get_redis_connection()
+            
             price += random.uniform(-0.5, 0.5)
             timestamp = time.strftime('%H:%M:%S')
             
-            # Atomic operations with Redis
             db.lpush('stock_history', f"{timestamp}|{price:.2f}")
             db.ltrim('stock_history', 0, 99)
             time.sleep(2)
-        except redis.ConnectionError:
-            print("Lost connection to Redis in worker. Reconnecting...")
-            # Re-establish connection without killing the thread
-            global db
-            db = get_redis_connection()
+        except Exception as e:
+            print(f"Worker encountered an error: {e}. Reconnecting...")
+            db = None
+            time.sleep(2)
 
 @app.route('/data')
 def get_data():
+    global db
     try:
+        if db is None:
+            return jsonify([]), 503
+        
         data = db.lrange('stock_history', 0, -1)
-        # Return formatted data for the chart
         return jsonify([d.split('|') for d in data][::-1])
-    except redis.ConnectionError:
-        return jsonify([]), 503  # Service Unavailable while reconnecting
+    except Exception:
+        return jsonify([]), 503
 
 if __name__ == '__main__':
-    # Start the generator thread
-    worker_thread = threading.Thread(target=stock_worker, daemon=True)
-    worker_thread.start()
+    # Initial connection attempt
+    db = get_redis_connection()
     
-    # Run Flask API
+    # Start the generator thread
+    threading.Thread(target=stock_worker, daemon=True).start()
+    
+    # Run Flask on port 5000
     app.run(host='0.0.0.0', port=5000)
