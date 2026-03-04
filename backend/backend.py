@@ -34,21 +34,33 @@ def get_redis_connection():
 
 def stock_worker():
     """
-    Background worker to generate stock data even if Redis blips
+    Background worker to generate stock data, recovering state from Redis
     """
     global db
-    price = 150.0
+    # Default starting price if Redis is empty
+    current_price = 150.0 
+    
     while True:
         try:
             if db is None:
                 db = get_redis_connection()
             
-            price += random.uniform(-0.5, 0.5)
+            # 1. RECOVERY LOGIC: Try to get the last known price from Redis
+            last_entry = db.lindex('stock_history', 0) # Get the most recent item
+            if last_entry:
+                # last_entry is "HH:MM:SS|PRICE", we split and take the price
+                current_price = float(last_entry.split('|')[1])
+            
+            # 2. GENERATE NEW DATA
+            current_price += random.uniform(-0.5, 0.5)
             timestamp = time.strftime('%H:%M:%S')
             
-            db.lpush('stock_history', f"{timestamp}|{price:.2f}")
+            # 3. SAVE
+            db.lpush('stock_history', f"{timestamp}|{current_price:.2f}")
             db.ltrim('stock_history', 0, 99)
+            
             time.sleep(2)
+            
         except Exception as e:
             print(f"Worker encountered an error: {e}. Reconnecting...")
             db = None
