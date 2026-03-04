@@ -40,7 +40,13 @@ def get_redis_connection():
             print(f"DEBUG: DNS Resolved {redis_host} -> {target_ip}", flush=True)
 
             # 2. Intentamos conectar
-            r = redis.Redis(host=target_ip, port=redis_port, socket_connect_timeout=1, decode_responses=True)
+            r = redis.Redis(
+                host=target_ip, 
+                port=redis_port, 
+                socket_connect_timeout=1,
+                socket_timeout=1, 
+                decode_responses=True
+            )
             r.ping()
             
             print(f"DEBUG: Connection SUCCESS to {target_ip}", flush=True)
@@ -56,15 +62,18 @@ def get_redis_connection():
 
 def stock_worker():
     """
-    Background worker using the same centralized connection logic
+    Background worker with aggressive reconnection
     """
     global db
     current_price = 150.0
+    print("Worker thread started", flush=True)
+    
     while True:
         try:
+            # Always get a fresh or validated connection
             active_db = get_db()
             
-            # State recovery from Redis
+            # Recovery logic
             last_entry = active_db.lindex('stock_history', 0)
             if last_entry:
                 current_price = float(last_entry.split('|')[1])
@@ -72,13 +81,17 @@ def stock_worker():
             current_price += random.uniform(-0.5, 0.5)
             timestamp = time.strftime('%H:%M:%S')
             
+            # This operation will now fail fast if the migration broke the socket
             active_db.lpush('stock_history', f"{timestamp}|{current_price:.2f}")
             active_db.ltrim('stock_history', 0, 99)
             
+            # Log to verify the worker is alive
+            print(f"Worker heartbeat: generated {current_price:.2f}", flush=True)
+            
             time.sleep(2)
         except Exception as e:
-            print(f"Worker connection issue: {e}. Retrying...", flush=True)
-            db = None # Reset global connection to force refresh
+            print(f"Worker loop error: {e}. Resetting connection...", flush=True)
+            db = None # Force a new DNS lookup and connection in the next iteration
             time.sleep(2)
 
 @app.route('/data')
