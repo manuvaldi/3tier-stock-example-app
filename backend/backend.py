@@ -18,19 +18,30 @@ REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 db = None
 
 def get_redis_connection():
-    """
-    Establish connection with Redis, retrying until successful
-    """
+    global db
+    redis_host = os.getenv('REDIS_HOST', 'database')
+    redis_port = int(os.getenv('REDIS_PORT', 6379))
+
     while True:
         try:
-            # Using the host and port from environment variables
-            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+            # 1. Intentamos resolver la IP para descartar problemas de DNS
+            target_ip = socket.gethostbyname(redis_host)
+            print(f"DEBUG: DNS Resolved {redis_host} -> {target_ip}", flush=True)
+
+            # 2. Intentamos conectar
+            r = redis.Redis(host=target_ip, port=redis_port, socket_connect_timeout=1, decode_responses=True)
             r.ping()
-            print(f"Successfully connected to Redis at {REDIS_HOST}")
+            
+            print(f"DEBUG: Connection SUCCESS to {target_ip}", flush=True)
             return r
-        except redis.ConnectionError:
-            print(f"Redis at {REDIS_HOST} not available, retrying in 2 seconds...")
-            time.sleep(2)
+        except socket.gaierror:
+            print(f"DEBUG: DNS ERROR - Cannot resolve {redis_host}", flush=True)
+        except redis.ConnectionError as e:
+            print(f"DEBUG: REDIS ERROR - Connection refused at {redis_host}: {e}", flush=True)
+        except Exception as e:
+            print(f"DEBUG: UNKNOWN ERROR: {type(e).__name__}: {e}", flush=True)
+        
+        time.sleep(2)
 
 def stock_worker():
     """
@@ -62,7 +73,7 @@ def stock_worker():
             time.sleep(2)
             
         except Exception as e:
-            print(f"Worker encountered an error: {e}. Reconnecting...")
+            print(f"Worker encountered an error: {e}. Reconnecting...", flush=True)
             db = None
             time.sleep(2)
 

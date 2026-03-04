@@ -15,4 +15,4 @@ COPY backend.py .
 # Exponemos el puerto de Flask
 EXPOSE 5000
 
-CMD ["python", "backend.py"]
+CMD ["python", "-u", "backend.py"]
