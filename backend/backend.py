@@ -18,6 +18,16 @@ REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 # Initialize db as None
 db = None
 
+def get_db():
+    """
+    Returns an active Redis connection. 
+    If connection is dead, it refreshes it before returning.
+    """
+    global db
+    if db is None:
+        db = get_redis_connection()
+    return db
+    
 def get_redis_connection():
     global db
     redis_host = os.getenv('REDIS_HOST', 'database')
@@ -46,49 +56,51 @@ def get_redis_connection():
 
 def stock_worker():
     """
-    Background worker to generate stock data, recovering state from Redis
+    Background worker using the same centralized connection logic
     """
     global db
-    # Default starting price if Redis is empty
-    current_price = 150.0 
-    
+    current_price = 150.0
     while True:
         try:
-            if db is None:
-                db = get_redis_connection()
+            active_db = get_db()
             
-            # 1. RECOVERY LOGIC: Try to get the last known price from Redis
-            last_entry = db.lindex('stock_history', 0) # Get the most recent item
+            # State recovery from Redis
+            last_entry = active_db.lindex('stock_history', 0)
             if last_entry:
-                # last_entry is "HH:MM:SS|PRICE", we split and take the price
                 current_price = float(last_entry.split('|')[1])
-            
-            # 2. GENERATE NEW DATA
+
             current_price += random.uniform(-0.5, 0.5)
             timestamp = time.strftime('%H:%M:%S')
             
-            # 3. SAVE
-            db.lpush('stock_history', f"{timestamp}|{current_price:.2f}")
-            db.ltrim('stock_history', 0, 99)
+            active_db.lpush('stock_history', f"{timestamp}|{current_price:.2f}")
+            active_db.ltrim('stock_history', 0, 99)
             
             time.sleep(2)
-            
         except Exception as e:
-            print(f"Worker encountered an error: {e}. Reconnecting...", flush=True)
-            db = None
+            print(f"Worker connection issue: {e}. Retrying...", flush=True)
+            db = None # Reset global connection to force refresh
             time.sleep(2)
 
 @app.route('/data')
 def get_data():
+    """
+    API Endpoint that ensures fresh connection on every request
+    """
     global db
     try:
-        if db is None:
-            return jsonify([]), 503
-        
-        data = db.lrange('stock_history', 0, -1)
+        # We try to use the current connection
+        active_db = get_db()
+        data = active_db.lrange('stock_history', 0, -1)
         return jsonify([d.split('|') for d in data][::-1])
-    except Exception:
+    except (redis.ConnectionError, socket.gaierror):
+        # If it fails during the request, we reset db so the next 
+        # request triggers a fresh DNS lookup and reconnection
+        print("Connection lost during request. Resetting connection object.", flush=True)
+        db = None 
         return jsonify([]), 503
+    except Exception as e:
+        print(f"Unexpected error in API: {e}", flush=True)
+        return jsonify([]), 500
 
 if __name__ == '__main__':
     # Initial connection attempt
