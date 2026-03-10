@@ -81,7 +81,16 @@
         </div>
         <img src="https://www.redhat.com/cms/managed-files/Brand_Standars-Red_Hat-_color_on-darkgray.svg" alt="Red Hat Logo" class="logo-redhat">
     </div>
-
+    <div style="margin-bottom: 20px;">
+        <label for="limitSelector">Points:</label>
+        <select id="limitSelector" onchange="updateData()">
+            <option value="100" selected>100 (Default)</option>
+            <option value="200">200</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="-1">Todos</option>
+        </select>
+    </div>
     <div class="container">
         <canvas id="stockChart" height="120"></canvas> </div>
 
@@ -123,22 +132,27 @@
         });
         
         async function updateData() {
+            const limit = document.getElementById('limitSelector').value;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+
             try {
-                // Ahora llamamos a la ruta local de Nginx
-                const res = await fetch('/data');
+                // Enviamos el límite como query string
+                const res = await fetch(`/data?limit=${limit}`, { signal: controller.signal });
+                if (!res.ok) throw new Error('Backend error');
+                
                 const data = await res.json();
+                clearTimeout(timeoutId);
+
+                // Actualizamos la gráfica con la nueva cantidad de puntos
+                chart.data.labels = data.map(d => d[0]);
+                chart.data.datasets[0].data = data.map(d => d[1]);
                 
-                const limitedData = data.slice(-100);
-                chart.data.labels = limitedData.map(d => d[0]);
-                chart.data.datasets[0].data = limitedData.map(d => d[1]);
-                
-                document.getElementById('dot').style.backgroundColor = '#2ecc71';
-                document.getElementById('status-text').innerText = 'Live: Últimos 100 puntos';
-                
-                chart.update('none'); 
+                // ... (resto de lógica de colores y status igual)
+                chart.update('none');
             } catch (e) {
                 document.getElementById('dot').style.backgroundColor = '#f1c40f';
-                document.getElementById('status-text').innerText = 'Reconectando...';
+                document.getElementById('status-text').innerText = 'Reconecting...';
             }
         }
         setInterval(updateData, 2000);

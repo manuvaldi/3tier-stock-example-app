@@ -2,7 +2,7 @@ import redis
 import time
 import random
 import socket
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import threading
 import os # Necessary to read environment variables
@@ -81,9 +81,10 @@ def stock_worker():
             current_price += random.uniform(-0.5, 0.5)
             timestamp = time.strftime('%H:%M:%S')
             
-            # This operation will now fail fast if the migration broke the socket
+            # En stock_worker:
             active_db.lpush('stock_history', f"{timestamp}|{current_price:.2f}")
-            active_db.ltrim('stock_history', 0, 99)
+            active_db.ltrim('stock_history', 0, 5000) # Guardamos hasta 5000 puntos en Redis            
+
             
             # Log to verify the worker is alive
             print(f"Worker heartbeat: generated {current_price:.2f}", flush=True)
@@ -96,23 +97,30 @@ def stock_worker():
 
 @app.route('/data')
 def get_data():
-    """
-    API Endpoint that ensures fresh connection on every request
-    """
     global db
+    # Get the 'limit' from URL params, default to 100
+    limit_param = request.args.get('limit', 100)
+    
     try:
-        # We try to use the current connection
         active_db = get_db()
-        data = active_db.lrange('stock_history', 0, -1)
+        
+        # If limit is -1, we get all points (up to our 1000 cap in worker)
+        # Otherwise, we calculate the range for Redis
+        if int(limit_param) == -1:
+            end_index = -1
+        else:
+            end_index = int(limit_param) - 1
+            
+        data = active_db.lrange('stock_history', 0, end_index)
+        # We return the list reversed to show oldest to newest in the chart
         return jsonify([d.split('|') for d in data][::-1])
+    
     except (redis.ConnectionError, socket.gaierror):
-        # If it fails during the request, we reset db so the next 
-        # request triggers a fresh DNS lookup and reconnection
         print("Connection lost during request. Resetting connection object.", flush=True)
         db = None 
         return jsonify([]), 503
     except Exception as e:
-        print(f"Unexpected error in API: {e}", flush=True)
+        print(f"[DEBUG] API Error: {e}", flush=True)
         return jsonify([]), 500
 
 if __name__ == '__main__':
