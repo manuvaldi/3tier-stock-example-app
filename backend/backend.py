@@ -34,30 +34,38 @@ def get_redis_connection():
     redis_port = int(os.getenv('REDIS_PORT', 6379))
 
     while True:
+        print(f"\n[DEBUG] --- Attempting fresh connection to {redis_host} ---", flush=True)
         try:
-            # 1. Intentamos resolver la IP para descartar problemas de DNS
-            target_ip = socket.gethostbyname(redis_host)
-            print(f"DEBUG: DNS Resolved {redis_host} -> {target_ip}", flush=True)
+            # FORCE DNS CACHE BYPASS:
+            # Using getaddrinfo with 0 flags helps bypass some OS-level caches
+            addr_info = socket.getaddrinfo(redis_host, redis_port, proto=socket.IPPROTO_TCP)
+            target_ip = addr_info[0][4][0]
+            print(f"[DEBUG] DNS Resolved {redis_host} -> {target_ip}", flush=True)
 
-            # 2. Intentamos conectar
+            # Create a fresh client
             r = redis.Redis(
                 host=target_ip, 
                 port=redis_port, 
                 socket_connect_timeout=1,
                 socket_timeout=1, 
-                decode_responses=True
+                decode_responses=True,
+                # Avoid keeping stale connections in a pool
+                single_connection_client=True 
             )
-            r.ping()
             
-            print(f"DEBUG: Connection SUCCESS to {target_ip}", flush=True)
+            r.ping()
+            print(f"[DEBUG] SUCCESS: Connected to {target_ip}", flush=True)
             return r
-        except socket.gaierror:
-            print(f"DEBUG: DNS ERROR - Cannot resolve {redis_host}", flush=True)
-        except redis.ConnectionError as e:
-            print(f"DEBUG: REDIS ERROR - Connection refused at {redis_host}: {e}", flush=True)
+
+        except (socket.gaierror, redis.ConnectionError) as e:
+            print(f"[DEBUG] CONNECTION FAILED: {e}", flush=True)
+            # If there was a previous connection object, destroy its pool
+            if 'r' in locals():
+                r.connection_pool.disconnect()
         except Exception as e:
-            print(f"DEBUG: UNKNOWN ERROR: {type(e).__name__}: {e}", flush=True)
+            print(f"[DEBUG] UNEXPECTED ERROR: {type(e).__name__}: {e}", flush=True)
         
+        print("[DEBUG] Waiting 2s before next DNS/Connection attempt...", flush=True)
         time.sleep(2)
 
 def stock_worker():
