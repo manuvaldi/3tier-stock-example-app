@@ -67,6 +67,9 @@
             color: #aaa;
             text-transform: uppercase;
         }
+        .status-dot, #status-text {
+            transition: all 0.5s ease;
+        }        
     </style>
 </head>
 <body>
@@ -160,7 +163,7 @@
                 document.getElementById('dot').style.backgroundColor = '#f1c40f';
                 document.getElementById('status-text').innerText = 'Reconecting...';
                 document.getElementById('status-text').style.color = '#f1c40f';
-                
+
                 console.warn("Fetch aborted or failed:", e.name === 'AbortError' ? 'Timeout' : e.message);                
             }
         }
