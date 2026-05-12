@@ -10,12 +10,16 @@ RUN chmod +x /docker-entrypoint.sh && \
 
 EXPOSE 8080
 
-# Lista separada por comas: el upstream usa todos; proxy_next_upstream reintenta si falla.
-# Puerto común de los backends (mismo para todos los hosts de la lista).
+# Comma-separated list: upstream uses all; proxy_next_upstream retries on failure.
+# Common port for backends (same for all hosts in the list).
 ENV BACKEND_HOST=backend
 ENV BACKEND_PORT=5000
-# Opcional (compat): si BACKEND_HOST está vacío y defines BACKEND_URL=http://host:puerto/ruta
-# se genera un upstream de un solo server a partir del host y el puerto de la URL.
+# Optional (compat): if BACKEND_HOST is empty and you set BACKEND_URL=http://host:port/path
+# a single-server upstream is built from the URL host and port.
 ENV BACKEND_URL=
+
+# Optional at startup: DNS/TCP probes per host (see docker-entrypoint.sh).
+# e.g. slow DNS on K8s: BACKEND_PROBE_ATTEMPTS=30 BACKEND_PROBE_SLEEP=2
+# Disable filter (risk of [emerg] if resolution fails): BACKEND_SKIP_PROBE=1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

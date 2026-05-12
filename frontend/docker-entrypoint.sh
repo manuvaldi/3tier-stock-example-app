@@ -6,6 +6,74 @@ UPSTREAM_FILE="${NGINX_UPSTREAM_FILE:-/tmp/nginx-upstream.conf}"
 TEMPLATE="${NGINX_TEMPLATE:-/etc/nginx/templates/nginx.conf.template}"
 OUT_CONF="${NGINX_CONF:-/etc/nginx/nginx.conf}"
 
+# Retries per host before dropping it (useful if K8s DNS takes a few seconds).
+BACKEND_PROBE_ATTEMPTS="${BACKEND_PROBE_ATTEMPTS:-1}"
+BACKEND_PROBE_SLEEP="${BACKEND_PROBE_SLEEP:-1}"
+# If 1, TCP to the port (nc) is probed in addition to DNS. Useful when ICMP is blocked but the service already responds.
+BACKEND_PROBE_TCP="${BACKEND_PROBE_TCP:-0}"
+# If 1, hosts are not filtered (previous behavior; nginx may fail to start if resolution fails).
+BACKEND_SKIP_PROBE="${BACKEND_SKIP_PROBE:-0}"
+
+case "${BACKEND_PROBE_ATTEMPTS}" in
+    ''|*[!0-9]*) BACKEND_PROBE_ATTEMPTS=1 ;;
+esac
+[ "$BACKEND_PROBE_ATTEMPTS" -lt 1 ] && BACKEND_PROBE_ATTEMPTS=1
+
+case "${BACKEND_PROBE_SLEEP}" in
+    ''|*[!0-9]*) BACKEND_PROBE_SLEEP=1 ;;
+esac
+[ "$BACKEND_PROBE_SLEEP" -lt 0 ] && BACKEND_PROBE_SLEEP=0
+
+dns_probe() {
+    _h="$1"
+    if command -v getent >/dev/null 2>&1; then
+        if getent ahosts "$_h" 2>/dev/null | head -n1 | grep -qE '[0-9A-Za-f:.]+'; then
+            return 0
+        fi
+    fi
+    if ping -c1 -W2 "$_h" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+tcp_probe() {
+    _h="$1"
+    _p="$2"
+    if ! command -v nc >/dev/null 2>&1; then
+        return 1
+    fi
+    nc -z -w3 "$_h" "$_p" >/dev/null 2>&1
+}
+
+host_passes_probe() {
+    _h="$1"
+    _p="$2"
+    if [ "${BACKEND_SKIP_PROBE}" = "1" ]; then
+        return 0
+    fi
+    _i=1
+    while [ "$_i" -le "$BACKEND_PROBE_ATTEMPTS" ]; do
+        if dns_probe "$_h"; then
+            return 0
+        fi
+        if [ "${BACKEND_PROBE_TCP}" = "1" ] && tcp_probe "$_h" "$_p"; then
+            return 0
+        fi
+        if [ "$_i" -lt "$BACKEND_PROBE_ATTEMPTS" ]; then
+            sleep "$BACKEND_PROBE_SLEEP"
+        fi
+        _i=$((_i + 1))
+    done
+    return 1
+}
+
+emit_server_line() {
+    _h="$1"
+    _p="$2"
+    echo "    server ${_h}:${_p} max_fails=2 fail_timeout=10s;"
+}
+
 write_upstream_from_hosts() {
     _tmp="${UPSTREAM_FILE}.new"
     {
@@ -16,12 +84,17 @@ write_upstream_from_hosts() {
         for h in $BACKEND_HOST; do
             h=$(printf '%s' "$h" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             [ -z "$h" ] && continue
-            echo "    server ${h}:${PORT} max_fails=2 fail_timeout=10s;"
-            _count=$((_count + 1))
+            if host_passes_probe "$h" "$PORT"; then
+                emit_server_line "$h" "$PORT"
+                _count=$((_count + 1))
+            else
+                echo "frontend(entrypoint): skipping upstream (DNS/TCP probe failed): ${h}:${PORT}" >&2
+            fi
         done
         IFS="$_old_ifs"
         if [ "$_count" -eq 0 ]; then
-            echo "    server backend:${PORT} max_fails=2 fail_timeout=10s;"
+            echo "frontend(entrypoint): warning: no host passed the probe; using placeholder so nginx can start (502 until backends are available)." >&2
+            echo "    server 127.0.0.1:9;"
         fi
         echo "}"
     } >"$_tmp"
@@ -41,11 +114,34 @@ write_upstream_from_url() {
         srv_port="${hostport#*:}"
     fi
 
+    _tmp="${UPSTREAM_FILE}.new"
     {
         echo "upstream backends {"
-        echo "    server ${host}:${srv_port} max_fails=2 fail_timeout=10s;"
+        if host_passes_probe "$host" "$srv_port"; then
+            emit_server_line "$host" "$srv_port"
+        else
+            echo "frontend(entrypoint): skipping upstream from BACKEND_URL (probe failed): ${host}:${srv_port}" >&2
+            echo "frontend(entrypoint): warning: using placeholder 127.0.0.1:9 so nginx can start." >&2
+            echo "    server 127.0.0.1:9;"
+        fi
         echo "}"
-    } >"$UPSTREAM_FILE"
+    } >"$_tmp"
+    mv "$_tmp" "$UPSTREAM_FILE"
+}
+
+write_upstream_default() {
+    _tmp="${UPSTREAM_FILE}.new"
+    {
+        echo "upstream backends {"
+        if host_passes_probe "backend" "$PORT"; then
+            emit_server_line "backend" "$PORT"
+        else
+            echo "frontend(entrypoint): warning: host 'backend' did not pass the probe; using placeholder 127.0.0.1:9." >&2
+            echo "    server 127.0.0.1:9;"
+        fi
+        echo "}"
+    } >"$_tmp"
+    mv "$_tmp" "$UPSTREAM_FILE"
 }
 
 if [ -n "${BACKEND_HOST:-}" ]; then
@@ -53,11 +149,7 @@ if [ -n "${BACKEND_HOST:-}" ]; then
 elif [ -n "${BACKEND_URL:-}" ]; then
     write_upstream_from_url
 else
-    {
-        echo "upstream backends {"
-        echo "    server backend:${PORT} max_fails=2 fail_timeout=10s;"
-        echo "}"
-    } >"$UPSTREAM_FILE"
+    write_upstream_default
 fi
 
 cp "$TEMPLATE" "$OUT_CONF"

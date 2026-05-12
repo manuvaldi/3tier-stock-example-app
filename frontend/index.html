@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Stock Monitor - Enterprise Edition</title>
@@ -28,12 +28,12 @@
         }
 
         .logo-redhat {
-            height: 45px; /* Tamaño optimizado para el logo */
+            height: 45px; /* Optimized size for the logo */
         }
 
         .container {
             width: 100%;
-            max-width: 850px; /* Gráfica un poco más pequeña y centrada */
+            max-width: 850px; /* Chart area slightly smaller and centered */
             background-color: #2d2d2d;
             padding: 25px;
             border-radius: 4px;
@@ -91,7 +91,7 @@
             <option value="200">200</option>
             <option value="500">500</option>
             <option value="1000">1000</option>
-            <option value="-1">Todos</option>
+            <option value="-1">All</option>
         </select>
     </div>
     <div class="container">
@@ -112,14 +112,14 @@
                     borderWidth: 2,
                     fill: true,
                     tension: 0.2,
-                    pointRadius: 0 // Sin puntos para que la línea se vea más limpia
+                    pointRadius: 0 // No points so the line looks cleaner
                 }]
             },
             options: {
                 responsive: true,
-                animation: false, // Desactivado para mayor rendimiento
+                animation: false, // Disabled for better performance
                 plugins: {
-                    legend: { display: false } // Ocultamos leyenda para simplificar
+                    legend: { display: false } // Hide legend to simplify
                 },
                 scales: {
                     x: {
@@ -140,7 +140,7 @@
             const timeoutId = setTimeout(() => controller.abort(), 2000);
 
             try {
-                // Enviamos el límite como query string
+                // Send limit as query string
                 const res = await fetch(`/data?limit=${limit}`, { signal: controller.signal, cache: 'no-store' });
                 if (!res.ok) throw new Error('Backend unavailable');
                 
@@ -161,7 +161,7 @@
             } catch (e) {
                 clearTimeout(timeoutId);                
                 document.getElementById('dot').style.backgroundColor = '#f1c40f';
-                document.getElementById('status-text').innerText = 'Reconecting...';
+                document.getElementById('status-text').innerText = 'Reconnecting...';
                 document.getElementById('status-text').style.color = '#f1c40f';
 
                 console.warn("Fetch aborted or failed:", e.name === 'AbortError' ? 'Timeout' : e.message);                
