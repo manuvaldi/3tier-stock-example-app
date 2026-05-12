@@ -35,6 +35,10 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
 
+            # Cabeceras de respuesta añadidas por nginx (el backend puede añadir las suyas aparte)
+            add_header X-Upstream-Addr $upstream_addr always;
+            add_header X-Hostname     $hostname always;
+
             proxy_next_upstream error timeout http_502 http_503 http_504;
             proxy_next_upstream_tries 5;
 
@@ -48,6 +52,7 @@ http {
         }
         location = /error_handler {
             default_type application/json;
+            add_header X-Hostname $hostname always;
             return 503 '{"error": "backend_migrating"}';
         }
     }
