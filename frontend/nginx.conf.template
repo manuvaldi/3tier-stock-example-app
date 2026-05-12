@@ -16,6 +16,8 @@ http {
     sendfile        on;
     keepalive_timeout  65;
 
+    include /tmp/nginx-upstream.conf;
+
     server {
         listen       8080;
         server_name  localhost;
@@ -25,25 +27,28 @@ http {
             index  index.html index.htm;
         }
 
-        # Proxy al backend interno
+        # Proxy al backend interno (failover / reintentos entre servidores del upstream)
         location /data {
-            proxy_pass ${BACKEND_URL};
+            proxy_pass http://backends;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
 
+            proxy_next_upstream error timeout http_502 http_503 http_504;
+            proxy_next_upstream_tries 5;
+
             # Timeouts agresivos para la demo
             proxy_connect_timeout 1s;
             proxy_send_timeout    1s;
             proxy_read_timeout    1s;
-            
+
             proxy_intercept_errors on;
-            error_page 502 503 504 = /error_handler;         
+            error_page 502 503 504 =503 /error_handler;
         }
         location = /error_handler {
+            default_type application/json;
             return 503 '{"error": "backend_migrating"}';
-            add_header Content-Type application/json;
-        }        
+        }
     }
 }
