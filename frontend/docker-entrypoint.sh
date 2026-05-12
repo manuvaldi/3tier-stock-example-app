@@ -152,5 +152,30 @@ else
     write_upstream_default
 fi
 
-cp "$TEMPLATE" "$OUT_CONF"
+# Bake X-Hostname from HOSTEDNAME (nginx cannot read shell env); empty => nginx $hostname.
+_tmp_nginx="${OUT_CONF}.new"
+export HOSTEDNAME
+awk '
+function esc(s,    r, i, c) {
+    r = ""
+    for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") r = r "\\\\"
+        else if (c == "\"") r = r "\\\""
+        else r = r c
+    }
+    return r
+}
+{
+    if (index($0, "___X_HOSTNAME___") > 0) {
+        if (length(ENVIRON["HOSTEDNAME"]) == 0) {
+            gsub(/___X_HOSTNAME___/, "$hostname")
+        } else {
+            gsub(/___X_HOSTNAME___/, "\"" esc(ENVIRON["HOSTEDNAME"]) "\"")
+        }
+    }
+    print
+}' "$TEMPLATE" >"$_tmp_nginx"
+mv "$_tmp_nginx" "$OUT_CONF"
+
 exec nginx -g "daemon off; pid /tmp/nginx.pid;"

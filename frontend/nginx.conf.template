@@ -38,7 +38,7 @@ http {
             # Response headers added by nginx (the backend can add its own separately)
             add_header X-Upstream-Addr $upstream_addr always;
             add_header X-Gateway      nginx always;
-            add_header X-Hostname     $hostname always;
+            add_header X-Hostname     ___X_HOSTNAME___ always;
 
             proxy_next_upstream error timeout http_502 http_503 http_504;
             proxy_next_upstream_tries 5;
@@ -54,7 +54,7 @@ http {
         location = /error_handler {
             default_type application/json;
             add_header X-Gateway  nginx always;
-            add_header X-Hostname $hostname always;
+            add_header X-Hostname ___X_HOSTNAME___ always;
             return 503 '{"error": "backend_migrating"}';
         }
     }

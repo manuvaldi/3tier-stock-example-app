@@ -17,6 +17,8 @@ ENV BACKEND_PORT=5000
 # Optional (compat): if BACKEND_HOST is empty and you set BACKEND_URL=http://host:port/path
 # a single-server upstream is built from the URL host and port.
 ENV BACKEND_URL=
+# Optional: value for response header X-Hostname (defaults to nginx $hostname if unset).
+ENV HOSTEDNAME=
 
 # Optional at startup: DNS/TCP probes per host (see docker-entrypoint.sh).
 # e.g. slow DNS on K8s: BACKEND_PROBE_ATTEMPTS=30 BACKEND_PROBE_SLEEP=2
