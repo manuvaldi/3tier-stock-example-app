@@ -11,9 +11,12 @@ RUN chmod +x /docker-entrypoint.sh && \
 EXPOSE 8080
 
 # Comma-separated list: upstream uses all; proxy_next_upstream retries on failure.
-# Common port for backends (same for all hosts in the list).
+# Backend port: numeric BACKEND_PORT, or on OpenShift/K8s BACKEND_PORT may be tcp://ip:port
+# (injected for Service "backend") — the entrypoint extracts the port or uses BACKEND_SERVICE_PORT.
+# Override any time: BACKEND_LISTEN_PORT=5000
 ENV BACKEND_HOST=backend
 ENV BACKEND_PORT=5000
+ENV BACKEND_LISTEN_PORT=
 # Optional (compat): if BACKEND_HOST is empty and you set BACKEND_URL=http://host:port/path
 # a single-server upstream is built from the URL host and port.
 ENV BACKEND_URL=

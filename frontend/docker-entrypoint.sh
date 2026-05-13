@@ -1,7 +1,35 @@
 #!/bin/sh
 set -e
 
-PORT="${BACKEND_PORT:-5000}"
+# BACKEND_PORT is often plain "5000", but Kubernetes/OpenShift injects
+# BACKEND_PORT=tcp://<ip>:<port> for a Service named "backend", which nginx rejects.
+# Optional BACKEND_LISTEN_PORT overrides everything (use if you need a fixed port name).
+# If BACKEND_PORT is not a positive integer, fall back to BACKEND_SERVICE_PORT then 5000.
+resolve_backend_port() {
+    if [ -n "${BACKEND_LISTEN_PORT:-}" ]; then
+        printf '%s' "$BACKEND_LISTEN_PORT"
+        return
+    fi
+    _bp="${BACKEND_PORT:-}"
+    case "$_bp" in
+        *://*)
+            printf '%s' "$_bp" | sed 's/.*://'
+            return
+            ;;
+    esac
+    case "$_bp" in
+        ''|*[!0-9]*)
+            printf '%s' "${BACKEND_SERVICE_PORT:-5000}"
+            ;;
+        *)
+            printf '%s' "$_bp"
+            ;;
+    esac
+}
+
+PORT="$(resolve_backend_port)"
+case "$PORT" in ''|*[!0-9]*) PORT=5000 ;; esac
+
 UPSTREAM_FILE="${NGINX_UPSTREAM_FILE:-/tmp/nginx-upstream.conf}"
 TEMPLATE="${NGINX_TEMPLATE:-/etc/nginx/templates/nginx.conf.template}"
 OUT_CONF="${NGINX_CONF:-/etc/nginx/nginx.conf}"
