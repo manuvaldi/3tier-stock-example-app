@@ -25,6 +25,8 @@ http {
         location / {
             root   /usr/share/nginx/html;
             index  index.html index.htm;
+            add_header X-Gateway  nginx always;
+            add_header X-Hostname ___X_HOSTNAME___ always;
         }
 
         # Proxy to internal backend (failover / retries across upstream servers)
