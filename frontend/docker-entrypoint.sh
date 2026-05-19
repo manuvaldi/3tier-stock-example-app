@@ -172,10 +172,10 @@ write_upstream_default() {
     mv "$_tmp" "$UPSTREAM_FILE"
 }
 
-if [ -n "${BACKEND_HOST:-}" ]; then
-    write_upstream_from_hosts
-elif [ -n "${BACKEND_URL:-}" ]; then
+if [ -n "${BACKEND_URL:-}" ]; then
     write_upstream_from_url
+elif [ -n "${BACKEND_HOST:-}" ]; then
+    write_upstream_from_hosts
 else
     write_upstream_default
 fi

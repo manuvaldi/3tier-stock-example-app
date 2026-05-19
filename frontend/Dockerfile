@@ -17,8 +17,8 @@ EXPOSE 8080
 ENV BACKEND_HOST=backend
 ENV BACKEND_PORT=5000
 ENV BACKEND_LISTEN_PORT=
-# Optional (compat): if BACKEND_HOST is empty and you set BACKEND_URL=http://host:port/path
-# a single-server upstream is built from the URL host and port.
+# Optional: BACKEND_URL=http://host:port/path takes priority over BACKEND_HOST when both are set.
+# Single-server upstream is built from the URL host and port (path is ignored).
 ENV BACKEND_URL=
 # Optional: value for response header X-Hostname (defaults to nginx $hostname if unset).
 ENV HOSTEDNAME=
